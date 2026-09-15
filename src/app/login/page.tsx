@@ -1,10 +1,18 @@
 import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { usuarios } from "@/db/schema";
 import { sesionActual } from "@/lib/auth";
 import { AGENCIA } from "@/lib/agencia";
 import { FormLogin } from "./FormLogin";
 
 export default async function LoginPage() {
   if (await sesionActual()) redirect("/");
+
+  const cuentas = await db
+    .select({ nombre: usuarios.nombre, email: usuarios.email, rol: usuarios.rol })
+    .from(usuarios)
+    .where(eq(usuarios.activo, true));
 
   return (
     <main className="flex min-h-dvh items-center justify-center p-5">
@@ -23,7 +31,7 @@ export default async function LoginPage() {
           </span>
         </div>
 
-        <FormLogin />
+        <FormLogin cuentas={cuentas} />
 
         <p className="mt-5 text-center text-[12px] text-faint">
           {AGENCIA.titular} · {AGENCIA.matricula}
