@@ -1,0 +1,1 @@
+ALTER TABLE "usuarios" ADD COLUMN "password_cambiado" boolean DEFAULT false NOT NULL;

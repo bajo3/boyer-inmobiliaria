@@ -1,0 +1,363 @@
+@import "tailwindcss";
+
+/**
+ * Sistema visual índigo.
+ *
+ * Decisión de color: el índigo es la única familia lo bastante lejos del verde,
+ * el amarillo y el rojo como para no discutirles el significado. El semáforo es
+ * lo único cálido de la pantalla, así que un rojo aparece solo, no entre
+ * naranjas. El rojo se usa chico y macizo —chip lleno y un riel de 4 px en el
+ * borde de la fila—, nunca como fondo de fila: veinte filas con tres urgencias
+ * se leen de un vistazo sin parecer una alarma.
+ *
+ * Es un mundo claro a propósito. No hay variante oscura.
+ */
+
+:root {
+  --ground: #fbfaff;
+  --surface: #ffffff;
+  --surface-2: #f7f5ff;
+  --sunken: #f3f2fb;
+
+  --ink: #14132b;
+  --ink-2: #4a4866;
+  --muted: #6c6a8c;
+  --faint: #8b89a6;
+
+  --line: #e6e4f5;
+  --line-soft: #f0eefa;
+  --line-input: #e0ddf2;
+
+  --accent: #4b3de8;
+  --accent-hover: #3326cc;
+  --accent-soft: #edeaff;
+  --accent-border: #c7bffb;
+  --accent-deep: #241f6b;
+
+  /* Semáforo — significado, no decoración. */
+  --ok: #0b6b45;
+  --ok-bg: #e3f6ee;
+  --ok-solid: #0f9d63;
+  --ok-border: #cfe8da;
+
+  --warn: #8a5a00;
+  --warn-bg: #fdf1da;
+  --warn-solid: #e8b04b;
+  --warn-border: #f2e2be;
+
+  --crit: #b01b1b;
+  --crit-bg: #fde8e8;
+  --crit-solid: #dc2626;
+  --crit-border: #f6c9c9;
+
+  --sombra: 0 1px 2px rgba(20, 19, 43, 0.05);
+  --sombra-alta: 0 10px 30px -22px rgba(20, 19, 43, 0.7);
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
+  --color-accent-deep: var(--accent-deep);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-crit: var(--crit);
+  --color-crit-bg: var(--crit-bg);
+
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  background: var(--ground);
+  /* El sistema vive en claro; sin esto los inputs se pintan oscuros. */
+  color-scheme: light;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+@keyframes latido {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+.latido {
+  animation: latido 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ───────────────────────── tarjetas ───────────────────────── */
+
+.tarjeta {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--sombra);
+}
+
+.tarjeta-i {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+/* ───────────────────────── formularios ───────────────────────── */
+
+.campo {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line-input);
+  border-radius: 13px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.campo::placeholder {
+  color: var(--faint);
+}
+.campo:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.campo:disabled {
+  opacity: 0.55;
+}
+
+.etiqueta {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.rotulo {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ───────────────────────── botones ───────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primario {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 8px 20px -8px rgba(75, 61, 232, 0.8);
+}
+.btn-primario:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-neutro {
+  background: var(--surface);
+  color: var(--ink-2);
+  border-color: var(--line-input);
+}
+.btn-neutro:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--accent-border);
+}
+
+/* Los botones de WhatsApp son verdes: es el color de la app y ayuda a
+   encontrarlos rápido. No compite con el semáforo porque están agrupados. */
+.btn-wa {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--ok-border);
+  border-radius: 13px;
+  font-size: 13.5px;
+  padding: 10px 13px;
+}
+.btn-wa:hover {
+  background: #e2f4ec;
+  border-color: var(--ok-solid);
+}
+
+.btn-chico {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  border-radius: 11px;
+}
+
+/* Solapas y navegación: pastilla, activa rellena de índigo. */
+.pastilla-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 13.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pastilla-nav:hover {
+  border-color: var(--accent-border);
+}
+.pastilla-nav[data-activa="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.solapa {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 13.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.solapa:hover {
+  border-color: var(--accent-border);
+}
+.solapa[data-activa="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+.solapa .cuenta {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--muted);
+}
+.solapa[data-activa="true"] .cuenta {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ───────────────────────── fila de consulta ───────────────────────── */
+
+.fila {
+  display: flex;
+  gap: 11px;
+  align-items: stretch;
+  padding: 15px 16px 15px 13px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.fila:hover {
+  background: var(--surface-2);
+}
+.fila[data-activa="true"] {
+  background: var(--accent-soft);
+}
+
+/* El riel es el semáforo. 4 px al borde, nunca el fondo de la fila. */
+.riel {
+  width: 4px;
+  border-radius: 99px;
+  flex: none;
+}
+.riel-ok {
+  background: var(--ok-solid);
+}
+.riel-warn {
+  background: var(--warn-solid);
+}
+.riel-crit {
+  background: var(--crit-solid);
+}
+.riel-neutral {
+  background: #c6c4dc;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.recorte {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
