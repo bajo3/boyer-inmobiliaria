@@ -25,6 +25,7 @@ export const rolEnum = pgEnum("rol", ["titular", "administrativa", "vendedor"]);
 export const tipoContactoEnum = pgEnum("tipo_contacto", [
   "comprador",
   "propietario",
+  "inquilino",
   "ambos",
 ]);
 
@@ -116,6 +117,21 @@ export const etapaOperacionEnum = pgEnum("etapa_operacion", [
   "boleto",
   "escritura",
   "caida",
+]);
+
+export const estadoContratoEnum = pgEnum("estado_contrato", [
+  "activo",
+  "finalizado",
+  "rescindido",
+]);
+
+/** Cada cuánto se actualiza el monto. Lo más común hoy en Tandil es cuatrimestral. */
+export const ajusteEnum = pgEnum("ajuste", [
+  "trimestral",
+  "cuatrimestral",
+  "semestral",
+  "anual",
+  "sin_ajuste",
 ]);
 
 /* ────────────────────────────── usuarios ────────────────────────────── */
@@ -356,6 +372,97 @@ export const operaciones = pgTable("operaciones", {
   creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/* ────────────────────────────── alquileres ────────────────────────────── */
+
+/**
+ * Un contrato de alquiler vivo: quién alquila qué, cuánto paga y qué día.
+ *
+ * El alquiler es la parte del negocio que se repite todos los meses, así que
+ * es también la que más se olvida: el cobro no falla por falta de ganas sino
+ * porque nadie lleva la cuenta de quién ya pagó. De acá sale el recordatorio.
+ */
+export const contratos = pgTable(
+  "contratos",
+  {
+    id: serial("id").primaryKey(),
+    propiedadId: integer("propiedad_id")
+      .notNull()
+      .references(() => propiedades.id, { onDelete: "cascade" }),
+    inquilinoId: integer("inquilino_id")
+      .notNull()
+      .references(() => contactos.id, { onDelete: "cascade" }),
+    propietarioId: integer("propietario_id").references(() => contactos.id, {
+      onDelete: "set null",
+    }),
+    monto: numeric("monto", { precision: 14, scale: 2 }).notNull(),
+    moneda: monedaEnum("moneda").notNull().default("ARS"),
+    expensas: numeric("expensas", { precision: 12, scale: 2 }),
+    /** Día del mes en que vence. Si el mes es más corto, se usa el último día. */
+    diaVencimiento: integer("dia_vencimiento").notNull().default(10),
+    inicio: date("inicio").notNull(),
+    fin: date("fin").notNull(),
+    ajuste: ajusteEnum("ajuste").notNull().default("cuatrimestral"),
+    proximoAjuste: date("proximo_ajuste"),
+    comisionPct: numeric("comision_pct", { precision: 5, scale: 2 }),
+    estado: estadoContratoEnum("estado").notNull().default("activo"),
+    /**
+     * Último recordatorio mandado y de qué período, para no avisarle dos veces
+     * lo mismo a la misma persona.
+     */
+    recordatorioAt: timestamp("recordatorio_at", { withTimezone: true }),
+    recordatorioPeriodo: text("recordatorio_periodo"),
+    notas: text("notas"),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("contratos_estado_idx").on(t.estado),
+    index("contratos_inquilino_idx").on(t.inquilinoId),
+  ],
+);
+
+/** Un pago por mes y por contrato. El período es "2026-09". */
+export const pagos = pgTable(
+  "pagos",
+  {
+    id: serial("id").primaryKey(),
+    contratoId: integer("contrato_id")
+      .notNull()
+      .references(() => contratos.id, { onDelete: "cascade" }),
+    periodo: text("periodo").notNull(),
+    monto: numeric("monto", { precision: 14, scale: 2 }).notNull(),
+    pagadoAt: timestamp("pagado_at", { withTimezone: true }).notNull().defaultNow(),
+    registradoPor: integer("registrado_por").references(() => usuarios.id, {
+      onDelete: "set null",
+    }),
+    notas: text("notas"),
+  },
+  (t) => [uniqueIndex("pagos_contrato_periodo_idx").on(t.contratoId, t.periodo)],
+);
+
+/* ────────────────────────────── índices ────────────────────────────── */
+
+/**
+ * Variación mensual del IPC (INDEC) y del ICL (BCRA), para calcular ajustes.
+ *
+ * Vive en la base y no en el código porque los publica un tercero todos los
+ * meses: si hubiera que tocar el código para actualizar un número, en marzo
+ * ya estaría desactualizado.
+ */
+export const indices = pgTable(
+  "indices",
+  {
+    id: serial("id").primaryKey(),
+    /** "ipc" o "icl". */
+    tipo: text("tipo").notNull().default("ipc"),
+    /** "2026-09" */
+    mes: text("mes").notNull(),
+    /** Variación porcentual del mes. 2.4 significa 2,4 %. */
+    valor: numeric("valor", { precision: 8, scale: 4 }).notNull(),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("indices_tipo_mes_idx").on(t.tipo, t.mes)],
+);
+
 /* ────────────────────────────── relations ────────────────────────────── */
 
 export const usuariosRel = relations(usuarios, ({ many }) => ({
@@ -443,6 +550,29 @@ export const busquedasRel = relations(busquedas, ({ one }) => ({
   }),
 }));
 
+export const contratosRel = relations(contratos, ({ one, many }) => ({
+  propiedad: one(propiedades, {
+    fields: [contratos.propiedadId],
+    references: [propiedades.id],
+  }),
+  inquilino: one(contactos, {
+    fields: [contratos.inquilinoId],
+    references: [contactos.id],
+  }),
+  propietario: one(contactos, {
+    fields: [contratos.propietarioId],
+    references: [contactos.id],
+  }),
+  pagos: many(pagos),
+}));
+
+export const pagosRel = relations(pagos, ({ one }) => ({
+  contrato: one(contratos, {
+    fields: [pagos.contratoId],
+    references: [contratos.id],
+  }),
+}));
+
 export const operacionesRel = relations(operaciones, ({ one }) => ({
   propiedad: one(propiedades, {
     fields: [operaciones.propiedadId],
@@ -465,3 +595,6 @@ export type Actividad = typeof actividades.$inferSelect;
 export type Visita = typeof visitas.$inferSelect;
 export type Busqueda = typeof busquedas.$inferSelect;
 export type Operacion = typeof operaciones.$inferSelect;
+export type Contrato = typeof contratos.$inferSelect;
+export type Pago = typeof pagos.$inferSelect;
+export type Indice = typeof indices.$inferSelect;

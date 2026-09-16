@@ -246,8 +246,168 @@ async function main() {
   }
 
   console.log(`  ${gente.length} consultas de ejemplo`);
+
+  await alquileresDeEjemplo(admin.id);
+  await busquedasDeEjemplo();
+  await autorizacionesDeEjemplo();
+
   console.log("\nListo.");
   await cerrar();
+}
+
+/* ── alquileres ───────────────────────────────────────────────────── */
+
+/** "2026-09" del mes en curso. */
+function periodoActual(): string {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Tres contratos en los tres estados que importan: uno atrasado, uno pagado y
+ * uno por vencer. Sin los tres, la pantalla de alquileres no muestra nada.
+ */
+async function alquileresDeEjemplo(adminId: number) {
+  const [{ ya }] = await db
+    .select({ ya: sql<number>`count(*)::int` })
+    .from(schema.contratos);
+
+  if (ya > 0) {
+    console.log(`→ Alquileres: ya hay ${ya} contratos, se omite`);
+    return;
+  }
+
+  console.log("→ Contratos de alquiler (--demo)");
+
+  const props = await db.query.propiedades.findMany({ limit: 12 });
+  const periodo = periodoActual();
+
+  // nombre, teléfono, monto, expensas, día de vencimiento, ¿ya pagó?
+  const inquilinos = [
+    ["Marcela Ibáñez", "249 15 4771122", 420000, 35000, 5, false],
+    ["Hernán Quiroga", "249 15 4883344", 510000, null, 10, true],
+    ["Carla Domínguez", "2494 556677", 365000, 28000, 17, false],
+  ] as const;
+
+  const hoy = new Date();
+
+  for (const [i, fila] of inquilinos.entries()) {
+    const [nombre, tel, monto, expensas, dia, pagado] = fila;
+    const propiedad = props[i + 6];
+    if (!propiedad) continue;
+
+    const [inquilino] = await db
+      .insert(schema.contactos)
+      .values({
+        nombre,
+        telefono: normalizarTelefono(tel),
+        tipo: "inquilino",
+        origen: "mostrador",
+      })
+      .returning();
+
+    const inicio = new Date(hoy.getFullYear(), hoy.getMonth() - 7, 1);
+    const fin = new Date(hoy.getFullYear() + 1, hoy.getMonth() + 17, 1);
+    const ajuste = new Date(hoy.getFullYear(), hoy.getMonth() + (i === 0 ? 1 : 5), 1);
+
+    const [contrato] = await db
+      .insert(schema.contratos)
+      .values({
+        propiedadId: propiedad.id,
+        inquilinoId: inquilino.id,
+        propietarioId: propiedad.propietarioId,
+        monto: monto.toString(),
+        moneda: "ARS",
+        expensas: expensas?.toString() ?? null,
+        diaVencimiento: dia,
+        inicio: inicio.toISOString().slice(0, 10),
+        fin: fin.toISOString().slice(0, 10),
+        ajuste: "cuatrimestral",
+        proximoAjuste: ajuste.toISOString().slice(0, 10),
+        comisionPct: "5",
+      })
+      .returning();
+
+    await db
+      .update(schema.propiedades)
+      .set({ operacion: "alquiler", estado: "reservada" })
+      .where(sql`id = ${propiedad.id}`);
+
+    if (pagado) {
+      await db.insert(schema.pagos).values({
+        contratoId: contrato.id,
+        periodo,
+        monto: monto.toString(),
+        registradoPor: adminId,
+      });
+    }
+  }
+
+  console.log(`  ${inquilinos.length} contratos`);
+}
+
+/* ── búsquedas ────────────────────────────────────────────────────── */
+
+/**
+ * Perfiles de búsqueda derivados de propiedades que existen, para que el cruce
+ * encuentre algo. Una búsqueda inventada al azar no coincide con nada y la
+ * pantalla queda vacía justo donde hay que mostrar que el sistema sirve.
+ */
+async function busquedasDeEjemplo() {
+  const [{ ya }] = await db
+    .select({ ya: sql<number>`count(*)::int` })
+    .from(schema.busquedas);
+
+  if (ya > 0) {
+    console.log(`→ Búsquedas: ya hay ${ya} cargadas, se omite`);
+    return;
+  }
+
+  console.log("→ Perfiles de búsqueda (--demo)");
+
+  const conPrecio = await db.query.propiedades.findMany({
+    where: sql`precio is not null and barrio is not null and operacion = 'venta'`,
+    limit: 3,
+  });
+
+  const compradores = [
+    ["Julieta Moreno", "249 15 4009911"],
+    ["Ramiro Vega", "249 15 4118822"],
+    ["Ana Lucía Prat", "2494 337755"],
+  ] as const;
+
+  let creadas = 0;
+
+  for (const [i, p] of conPrecio.entries()) {
+    const datos = compradores[i];
+    if (!datos) break;
+
+    const [contacto] = await db
+      .insert(schema.contactos)
+      .values({
+        nombre: datos[0],
+        telefono: normalizarTelefono(datos[1]),
+        tipo: "comprador",
+        origen: "mostrador",
+      })
+      .returning();
+
+    await db.insert(schema.busquedas).values({
+      contactoId: contacto.id,
+      operacion: "venta",
+      tipos: [p.tipo],
+      barrios: p.barrio ? [p.barrio] : [],
+      // Un 15 % de margen: busca en esa zona y ese rango, no esa propiedad exacta.
+      precioMax: Math.round(Number(p.precio) * 1.15).toString(),
+      moneda: p.moneda,
+      dormitoriosMin: p.dormitorios,
+      activa: true,
+    });
+
+    creadas++;
+  }
+
+  console.log(`  ${creadas} búsquedas`);
 }
 
 main().catch(async (e) => {
@@ -255,3 +415,83 @@ main().catch(async (e) => {
   await cerrar();
   process.exit(1);
 });
+
+/* ── autorizaciones ───────────────────────────────────────────────── */
+
+/**
+ * Tres autorizaciones con propietario, una de ellas por vencer.
+ *
+ * El relevamiento trajo las propiedades del portal, que no dice de quién son:
+ * sin propietario y sin fecha de vencimiento, ni el aviso del panel ni el
+ * documento de autorización tienen con qué trabajar.
+ */
+async function autorizacionesDeEjemplo() {
+  const [{ ya }] = await db
+    .select({ ya: sql<number>`count(*)::int` })
+    .from(schema.autorizaciones);
+
+  if (ya > 0) {
+    console.log(`→ Autorizaciones: ya hay ${ya} cargadas, se omite`);
+    return;
+  }
+
+  console.log("→ Autorizaciones (--demo)");
+
+  const props = await db.query.propiedades.findMany({
+    where: sql`operacion = 'venta' and precio is not null`,
+    limit: 3,
+  });
+
+  // nombre del propietario, teléfono, exclusiva, meses hasta el vencimiento
+  const duenos = [
+    ["Roberto Sanguinetti", "249 15 4662211", true, 1],
+    ["Estela Márquez", "2494 448899", false, 7],
+    ["Sucesión Iriarte", "249 15 4337766", true, 4],
+  ] as const;
+
+  const hoy = new Date();
+  let creadas = 0;
+
+  for (const [i, p] of props.entries()) {
+    const datos = duenos[i];
+    if (!datos) break;
+
+    const [nombre, tel, exclusiva, meses] = datos;
+
+    const [propietario] = await db
+      .insert(schema.contactos)
+      .values({
+        nombre,
+        telefono: normalizarTelefono(tel),
+        tipo: "propietario",
+        origen: "mostrador",
+      })
+      .returning();
+
+    await db
+      .update(schema.propiedades)
+      .set({ propietarioId: propietario.id })
+      .where(sql`id = ${p.id}`);
+
+    const desde = new Date(hoy.getFullYear(), hoy.getMonth() - 6, 1);
+    const hasta = new Date(hoy.getFullYear(), hoy.getMonth() + meses, 1);
+
+    await db.insert(schema.autorizaciones).values({
+      propiedadId: p.id,
+      propietarioId: propietario.id,
+      desde: desde.toISOString().slice(0, 10),
+      hasta: hasta.toISOString().slice(0, 10),
+      exclusiva,
+      comisionPct: "3",
+      precioAutorizado: p.precio,
+      // El piso solo lo ve la titular: es lo que el dueño aceptaría de verdad.
+      precioPiso: Math.round(Number(p.precio) * 0.92).toString(),
+      notasInternas:
+        i === 0 ? "Acepta financiación en dos pagos. No quiere visitas los domingos." : null,
+    });
+
+    creadas++;
+  }
+
+  console.log(`  ${creadas} autorizaciones`);
+}

@@ -97,6 +97,24 @@ export function plantillasDisponibles(tienePropiedad: boolean): Plantilla[] {
   return PLANTILLAS.filter((p) => tienePropiedad || !p.requierePropiedad);
 }
 
+/**
+ * El aviso de que entró algo que esta persona estaba buscando.
+ *
+ * Va sin vendedor firmante a propósito: lo manda quien esté mirando la ficha,
+ * que no siempre es quien tiene asignado el contacto.
+ */
+export function mensajeOportunidad(
+  contacto: Contacto,
+  propiedad: Propiedad,
+): string {
+  return (
+    `Hola ${primerNombre(contacto.nombre)}, ¿cómo estás? Te escribo de ${NOMBRE_AGENCIA}.\n\n` +
+    `Entró algo que coincide con lo que estabas buscando: ${describir(propiedad)} — ` +
+    `${fmtPrecio(propiedad.precio, propiedad.moneda)}.\n\n` +
+    `¿Querés que coordinemos para que la veas?`
+  );
+}
+
 /** Construye el link wa.me listo para abrir. */
 export function linkWhatsApp(
   telefono: string | null,

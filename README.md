@@ -32,6 +32,16 @@ Las únicas dos acciones explícitas son **Ganado** y **Rechazar**.
 - **Corregir, reasignar y borrar** consultas — solo administrativa y titular.
 - **Cambio de contraseña** en `/cuenta`, con aviso hasta que cada uno cambie la inicial.
 - **Panel** con las seis preguntas de control, solo para el perfil titular.
+- **Aviso de la mañana** (`/resumen`): quién espera, qué venció, visitas del día,
+  alquileres a cobrar y gente esperando algo que ya está en cartera. Se manda
+  por WhatsApp de un clic.
+- **Alquileres** con semáforo de cobranza, recordatorio al inquilino con monto y
+  fecha ya escritos, y aviso de los ajustes que se vienen.
+- **Matching**: en cada propiedad, quién de la cartera está buscando exactamente
+  eso, con el motivo de la coincidencia y el WhatsApp listo.
+- **Documentos**: recibo de alquiler, contrato de locación y autorización de
+  venta, armados con los datos cargados y listos para imprimir o guardar en PDF.
+- **Calculadora de ajuste** por IPC, con la tabla de índices editable.
 
 ### Los tres roles
 
@@ -111,13 +121,18 @@ a qué base apuntan antes de tocar nada.
 
 ```
 src/
-  db/schema.ts        Las 9 tablas y sus enums
+  db/schema.ts        Las 12 tablas y sus enums
   db/seed.ts          Carga inicial
   lib/sla.ts          Las 4 reglas del plan, en código
+  lib/resumen.ts      El aviso de la mañana (regla 4)
+  lib/alquileres.ts   Vencimientos, cobranza y mensajes al inquilino
+  lib/matching.ts     Cruce entre lo que se busca y lo que hay
+  lib/ipc.ts          Ajuste por índice (se multiplica, no se suma)
   lib/telefono.ts     Normalización a E.164 (evita contactos duplicados)
   lib/whatsapp.ts     Plantillas y links wa.me
   actions/            Server actions: acá se aplican las reglas
   app/(app)/          Pantallas privadas
+  app/imprimir/       Documentos, sin menú y con estilos de impresión
   components/         Formularios y piezas de UI
 drizzle/              Migraciones SQL versionadas
 ```

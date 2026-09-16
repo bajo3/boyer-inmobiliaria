@@ -5,9 +5,12 @@ import { usePathname } from "next/navigation";
 
 const ITEMS = [
   { href: "/", label: "Bandeja", exacto: true },
+  { href: "/resumen", label: "Hoy" },
   { href: "/propiedades", label: "Propiedades" },
+  { href: "/alquileres", label: "Alquileres" },
   { href: "/contactos", label: "Contactos" },
   { href: "/agenda", label: "Agenda" },
+  { href: "/documentos", label: "Documentos" },
 ];
 
 export function NavLinks({ esTitular }: { esTitular: boolean }) {

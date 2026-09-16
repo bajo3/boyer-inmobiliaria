@@ -2,12 +2,20 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { propiedades, consultas, autorizaciones, visitas } from "@/db/schema";
+import {
+  propiedades,
+  consultas,
+  autorizaciones,
+  visitas,
+  busquedas,
+} from "@/db/schema";
 import { requerirSesion } from "@/lib/auth";
 import { editarPropiedad } from "@/actions/propiedades";
 import { FormPropiedad } from "@/components/FormPropiedad";
 import { Semaforo, Pastilla } from "@/components/Semaforo";
 import { evaluarConsulta } from "@/lib/sla";
+import { compradoresPara, describirBusqueda } from "@/lib/matching";
+import { linkWhatsApp, mensajeOportunidad } from "@/lib/whatsapp";
 import { mostrarTelefono } from "@/lib/telefono";
 import {
   precio as fmtPrecio,
@@ -54,6 +62,16 @@ export default async function FichaPropiedad({
     orderBy: [desc(visitas.fechaHora)],
     limit: 20,
   });
+
+  // Quién de la cartera está buscando exactamente esto. Es la parte que
+  // convierte el sistema en ventas y no solo en registro.
+  const activas = await db.query.busquedas.findMany({
+    where: eq(busquedas.activa, true),
+    with: { contacto: true },
+    limit: 300,
+  });
+
+  const interesados = compradoresPara(propiedad, activas);
 
   const diasAutorizacion = autorizacion
     ? Math.ceil(
@@ -144,6 +162,64 @@ export default async function FichaPropiedad({
               </p>
             )}
           </section>
+
+          {interesados.length > 0 && (
+            <section className="tarjeta border-[var(--ok-border)] bg-ok-bg p-4">
+              <h2 className="mb-1 rotulo text-ok">
+                {interesados.length}{" "}
+                {interesados.length === 1
+                  ? "persona de la cartera busca esto"
+                  : "personas de la cartera buscan esto"}
+              </h2>
+              <p className="mb-3 text-[12.5px] text-[#1c5f43]">
+                Ya te dejaron dicho qué querían. Nadie más se los va a avisar.
+              </p>
+
+              <ul className="space-y-1.5">
+                {interesados.map(({ busqueda, motivos }) => {
+                  const link = linkWhatsApp(
+                    busqueda.contacto.telefono,
+                    mensajeOportunidad(busqueda.contacto, propiedad),
+                  );
+
+                  return (
+                    <li
+                      key={busqueda.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-surface px-3.5 py-2.5"
+                    >
+                      <span className="min-w-0">
+                        <Link
+                          href={`/contactos/${busqueda.contacto.id}`}
+                          className="block truncate text-sm font-semibold hover:text-accent"
+                        >
+                          {busqueda.contacto.nombre}
+                        </Link>
+                        <span className="block truncate text-[12px] text-muted">
+                          {describirBusqueda(busqueda)}
+                        </span>
+                      </span>
+
+                      <span className="flex items-center gap-2">
+                        {motivos.length > 0 && (
+                          <Pastilla>coincide en {motivos.join(", ")}</Pastilla>
+                        )}
+                        {link && (
+                          <a
+                            href={link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-wa btn-chico"
+                          >
+                            Avisarle
+                          </a>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
 
           <section className="tarjeta p-4">
             <h2 className="mb-3 rotulo">
