@@ -46,24 +46,22 @@ async function conectar(): Promise<DB> {
   const local = url!.includes("localhost") || url!.includes("127.0.0.1");
   const pooler = url!.includes("pooler.supabase.com");
 
-  // El pooler de Supabase en modo transacción (puerto 6543) se cuelga cuando
-  // llegan más consultas en paralelo que conexiones abiertas: postgres.js las
-  // encola sobre una conexión ocupada y el pooler nunca las responde. Una sola
-  // pantalla dispara diez o más a la vez, así que pasaba seguido y sin error,
-  // solo la página cargando para siempre. En modo sesión (5432) la cola
-  // funciona. Se corrige acá y no solo en la variable de entorno para que no
-  // vuelva a aparecer si alguien pega la URL de 6543 que muestra Supabase.
-  const destino = pooler ? url!.replace(/:6543\//, ":5432/") : url!;
+  // Siempre el pooler en modo transacción (6543). El modo sesión (5432) tiene
+  // un tope duro de 15 clientes conectados para todo el proyecto, y en Vercel
+  // cada instancia que queda viva retiene los suyos: con unas pocas abiertas a
+  // la vez el sitio entero da error hasta que las instancias mueren.
+  const destino = pooler ? url!.replace(/:5432\//, ":6543/") : url!;
 
   const sql = postgres(destino, {
-    // En modo sesión cada conexión ocupa un lugar del pooler mientras está
-    // abierta: pocas por instancia y soltarlas rápido cuando no se usan.
     max: local ? 1 : 3,
+    // postgres.js manda hasta 100 consultas pegadas por la misma conexión
+    // cuando todas están ocupadas. El pooler de transacciones no sabe responder
+    // eso y la página queda cargando para siempre. Con 1, espera su turno.
+    max_pipeline: 1,
     idle_timeout: 20,
     connect_timeout: 15,
     ssl: local ? false : "require",
-    // Sin prepared statements: así la misma configuración sirve si la URL
-    // termina apuntando a un pooler de transacciones.
+    // El pooler de transacciones no soporta prepared statements.
     prepare: pooler ? false : undefined,
   });
 
