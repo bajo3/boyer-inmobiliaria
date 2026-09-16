@@ -40,36 +40,32 @@ async function conectar(): Promise<DB> {
     return drizzle(new PGlite(dir), { schema }) as unknown as DB;
   }
 
-  const { default: postgres } = await import("postgres");
-  const { drizzle } = await import("drizzle-orm/postgres-js");
+  const { Pool } = await import("pg");
+  const { drizzle } = await import("drizzle-orm/node-postgres");
 
   const local = url!.includes("localhost") || url!.includes("127.0.0.1");
   const pooler = url!.includes("pooler.supabase.com");
 
   // Siempre el pooler en modo transacción (6543). El modo sesión (5432) tiene
-  // un tope duro de 15 clientes conectados para todo el proyecto, y en Vercel
-  // cada instancia que queda viva retiene los suyos: con unas pocas abiertas a
-  // la vez el sitio entero da error hasta que las instancias mueren.
+  // un tope duro de 15 clientes para todo el proyecto, y en Vercel cada
+  // instancia que queda viva retiene los suyos: con unas pocas abiertas a la
+  // vez el sitio entero da error hasta que esas instancias mueren.
   const destino = pooler ? url!.replace(/:5432\//, ":6543/") : url!;
 
-  // max_pipeline existe en postgres.js pero no figura en sus tipos: por eso el
-  // objeto va aparte y no como literal dentro de la llamada.
-  const opciones = {
+  // Con el driver pg y no con postgres.js: contra el pooler de transacciones,
+  // postgres.js completa dos consultas por conexión y la tercera en cola no
+  // vuelve nunca (reproducido con `select 1`). Una pantalla dispara más de
+  // diez a la vez, así que se colgaba seguido. pg encola en memoria y manda
+  // de a una; con 60 consultas sobre 3 conexiones no falló.
+  const pool = new Pool({
+    connectionString: destino,
     max: local ? 1 : 3,
-    // postgres.js manda hasta 100 consultas pegadas por la misma conexión
-    // cuando todas están ocupadas. El pooler de transacciones no sabe responder
-    // eso y la página queda cargando para siempre. Con 1, espera su turno.
-    max_pipeline: 1,
-    idle_timeout: 20,
-    connect_timeout: 15,
-    ssl: local ? false : "require",
-    // El pooler de transacciones no soporta prepared statements.
-    prepare: pooler ? false : undefined,
-  };
+    idleTimeoutMillis: 20_000,
+    connectionTimeoutMillis: 15_000,
+    ssl: local ? false : { rejectUnauthorized: false },
+  });
 
-  const sql = postgres(destino, opciones as Parameters<typeof postgres>[1]);
-
-  return drizzle(sql, { schema }) as unknown as DB;
+  return drizzle(pool, { schema }) as unknown as DB;
 }
 
 /**
