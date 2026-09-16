@@ -52,7 +52,9 @@ async function conectar(): Promise<DB> {
   // la vez el sitio entero da error hasta que las instancias mueren.
   const destino = pooler ? url!.replace(/:5432\//, ":6543/") : url!;
 
-  const sql = postgres(destino, {
+  // max_pipeline existe en postgres.js pero no figura en sus tipos: por eso el
+  // objeto va aparte y no como literal dentro de la llamada.
+  const opciones = {
     max: local ? 1 : 3,
     // postgres.js manda hasta 100 consultas pegadas por la misma conexión
     // cuando todas están ocupadas. El pooler de transacciones no sabe responder
@@ -63,7 +65,9 @@ async function conectar(): Promise<DB> {
     ssl: local ? false : "require",
     // El pooler de transacciones no soporta prepared statements.
     prepare: pooler ? false : undefined,
-  });
+  };
+
+  const sql = postgres(destino, opciones as Parameters<typeof postgres>[1]);
 
   return drizzle(sql, { schema }) as unknown as DB;
 }
