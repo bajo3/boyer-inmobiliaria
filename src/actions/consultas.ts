@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { consultas, actividades, contactos, visitas } from "@/db/schema";
 import { requerirSesion, puedeAdministrar } from "@/lib/auth";
 import { normalizarTelefono } from "@/lib/telefono";
+import { leerConfiguracion, cargaDelEquipo, aQuienLeToca } from "@/lib/reparto";
 
 /** Actividades que cuentan como "ya hablamos con la persona" (Regla 1). */
 const ES_CONTACTO = new Set(["whatsapp", "llamada", "email", "visita"]);
@@ -39,7 +40,6 @@ const esquemaAlta = z.object({
   telefono: z.string().trim().optional(),
   canal: z.enum(CANALES),
   propiedadId: z.coerce.number().int().positive().optional(),
-  asignadaA: z.coerce.number().int().positive().optional(),
   mensaje: z.string().trim().optional(),
 });
 
@@ -60,7 +60,6 @@ export async function crearConsulta(
     telefono: formData.get("telefono") || undefined,
     canal: formData.get("canal"),
     propiedadId: formData.get("propiedadId") || undefined,
-    asignadaA: formData.get("asignadaA") || undefined,
     mensaje: formData.get("mensaje") || undefined,
   });
 
@@ -68,7 +67,26 @@ export async function crearConsulta(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
-  const { nombre, canal, propiedadId, asignadaA, mensaje } = parsed.data;
+  const { nombre, canal, propiedadId, mensaje } = parsed.data;
+
+  // "Pasársela a": un vendedor elegido, "ninguno" para dejarla sin asignar a
+  // propósito, o vacío. Vacío con el reparto automático prendido significa que
+  // la decide el sistema; con el reparto apagado, queda sin asignar como antes.
+  const eleccion = String(formData.get("asignadaA") ?? "");
+  let asignadaA: number | null = null;
+  let automatica: { nombre: string; abiertas: number } | null = null;
+
+  if (eleccion && eleccion !== "ninguno") {
+    const id = Number(eleccion);
+    if (!Number.isInteger(id) || id <= 0) return { error: "Vendedor inválido." };
+    asignadaA = id;
+  } else if (!eleccion && (await leerConfiguracion()).asignacionAutomatica) {
+    const elegido = aQuienLeToca(await cargaDelEquipo());
+    if (elegido) {
+      asignadaA = elegido.id;
+      automatica = elegido;
+    }
+  }
   const tel = normalizarTelefono(parsed.data.telefono);
 
   let contactoId: number | undefined;
@@ -89,15 +107,29 @@ export async function crearConsulta(
     contactoId = nuevo.id;
   }
 
-  await db.insert(consultas).values({
-    contactoId,
-    propiedadId: propiedadId ?? null,
-    canal,
-    mensajeOriginal: mensaje ?? null,
-    estado: "no_atendido",
-    asignadaA: asignadaA ?? null,
-    cargadaPor: usuario.id,
-  });
+  const [nueva] = await db
+    .insert(consultas)
+    .values({
+      contactoId,
+      propiedadId: propiedadId ?? null,
+      canal,
+      mensajeOriginal: mensaje ?? null,
+      estado: "no_atendido",
+      asignadaA,
+      cargadaPor: usuario.id,
+    })
+    .returning({ id: consultas.id });
+
+  // Queda escrito por qué le tocó a quién: sin esto, el reparto automático se
+  // discute ("¿por qué siempre a él?") en vez de confiarse.
+  if (automatica) {
+    await db.insert(actividades).values({
+      consultaId: nueva.id,
+      usuarioId: usuario.id,
+      tipo: "cambio_estado",
+      contenido: `Asignada automáticamente a ${automatica.nombre}: era quien menos consultas abiertas tenía (${automatica.abiertas}).`,
+    });
+  }
 
   revalidatePath("/");
   return { ok: true };

@@ -116,6 +116,34 @@ export async function cargarBandeja(
 
 type Datos = Awaited<ReturnType<typeof cargarBandeja>>;
 
+function iniciales(nombre: string): string {
+  return nombre
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+/** Quién la tiene. Sin asignar va en amarillo: es lo que falta repartir. */
+function Responsable({ nombre }: { nombre: string | null }) {
+  if (!nombre) {
+    return (
+      <span className="flex-none rounded-full bg-warn-bg px-2 py-[2px] text-[11px] font-bold text-warn">
+        Sin asignar
+      </span>
+    );
+  }
+  return (
+    <span
+      title={`La tiene ${nombre}`}
+      className="grid size-[24px] flex-none place-items-center rounded-full bg-accent-soft text-[10.5px] font-bold text-accent"
+    >
+      {iniciales(nombre)}
+    </span>
+  );
+}
+
 export async function BandejaLista({
   usuario,
   filtro,
@@ -140,12 +168,25 @@ export async function BandejaLista({
 
   return (
     <div className="tarjeta flex flex-col overflow-hidden">
-      {!compacta && (
-        <div className="px-4 pb-3 pt-4 sm:px-5">
-          <p className="text-[12px] text-muted">{fechaTitulo(new Date())}</p>
-          <h1 className="mt-0.5 font-display text-[26px] font-extrabold">
-            {SALUDO()}, {usuario.nombre.split(" ")[0]}
-          </h1>
+      {compacta ? (
+        <div className="px-4 pt-3.5 sm:px-5">
+          <NuevaConsulta chico />
+        </div>
+      ) : (
+        <div className="px-4 pb-1 pt-4 sm:px-5">
+          {/* El botón va arriba: es lo primero que se hace al abrir la bandeja,
+              y al pie quedaba debajo de toda la lista. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+            <div className="min-w-0">
+              <p className="text-[12px] text-muted">{fechaTitulo(new Date())}</p>
+              <h1 className="mt-0.5 font-display text-[26px] font-extrabold leading-tight">
+                {SALUDO()}, {usuario.nombre.split(" ")[0]}
+              </h1>
+            </div>
+            <div className="w-full sm:w-[230px]">
+              <NuevaConsulta />
+            </div>
+          </div>
 
           {enRojo.length > 0 ? (
             <div className="mt-3.5 flex items-center gap-3 rounded-[16px] border border-[var(--crit-border)] bg-crit-bg px-3.5 py-3">
@@ -175,38 +216,44 @@ export async function BandejaLista({
         </div>
       )}
 
-      <form className="px-4 pt-3 sm:px-5">
-        <input
-          type="search"
-          name="q"
-          defaultValue={datos.termino}
-          className="campo"
-          placeholder="Buscar por nombre, teléfono, código o calle"
-          aria-label="Buscar consultas"
-        />
-        <input type="hidden" name="f" value={filtro} />
-      </form>
+      <div
+        className={`flex flex-col gap-2.5 px-4 pb-3 pt-3 sm:px-5 ${
+          compacta ? "" : "lg:flex-row lg:items-center"
+        }`}
+      >
+        <form className={compacta ? "" : "lg:w-[320px] lg:flex-none"}>
+          <input
+            type="search"
+            name="q"
+            defaultValue={datos.termino}
+            className="campo"
+            placeholder="Buscar nombre, teléfono, código o calle"
+            aria-label="Buscar consultas"
+          />
+          <input type="hidden" name="f" value={filtro} />
+        </form>
 
-      <div className="flex flex-wrap gap-1.5 px-4 pb-3 pt-3 sm:px-5">
-        {(
-          [
-            ["mias", "Mías", conteos.mias],
-            ["sin_asignar", "Sin asignar", conteos.sin_asignar],
-            ["todas", "Todas", conteos.todas],
-            ["cerradas", "Cerradas", null],
-          ] as const
-        ).map(([clave, label, n]) => (
-          <Link
-            key={clave}
-            href={base(clave)}
-            data-activa={filtro === clave}
-            aria-current={filtro === clave ? "page" : undefined}
-            className="solapa"
-          >
-            {label}
-            {n !== null && <span className="cuenta">{n}</span>}
-          </Link>
-        ))}
+        <div className="flex flex-wrap gap-1.5">
+          {(
+            [
+              ["mias", "Mías", conteos.mias],
+              ["sin_asignar", "Sin asignar", conteos.sin_asignar],
+              ["todas", "Todas", conteos.todas],
+              ["cerradas", "Cerradas", null],
+            ] as const
+          ).map(([clave, label, n]) => (
+            <Link
+              key={clave}
+              href={base(clave)}
+              data-activa={filtro === clave}
+              aria-current={filtro === clave ? "page" : undefined}
+              className="solapa"
+            >
+              {label}
+              {n !== null && <span className="cuenta">{n}</span>}
+            </Link>
+          ))}
+        </div>
       </div>
 
       <ul className="border-t border-line-soft">
@@ -234,20 +281,26 @@ export async function BandejaLista({
                 >
                   <Riel nivel={s.nivel} />
 
-                  <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    {/* Quién consulta, quién la tiene y cómo está. */}
                     <span className="flex items-center gap-2">
                       <span className="recorte text-[15.5px] font-bold tracking-[-.01em]">
                         {c.contacto.nombre}
                       </span>
-                      <span className="flex-none rounded-full bg-sunken px-2 py-[2px] text-[11px] text-muted">
-                        {ETIQUETAS.canal[c.canal] ?? c.canal}
-                      </span>
+                      <Responsable nombre={c.vendedor?.nombre ?? null} />
                       <Semaforo nivel={s.nivel} className="ml-auto">
                         {s.etiqueta}
                       </Semaforo>
                     </span>
 
+                    {/* Por dónde llegó y por qué propiedad. */}
                     <span className="flex min-w-0 items-baseline gap-2 text-[13px] text-ink-2">
+                      <span className="flex-none text-muted">
+                        {ETIQUETAS.canal[c.canal] ?? c.canal}
+                      </span>
+                      <span aria-hidden className="text-faint">
+                        ·
+                      </span>
                       {c.propiedad ? (
                         <>
                           <span className="tnum flex-none font-semibold text-accent">
@@ -261,40 +314,33 @@ export async function BandejaLista({
                           </span>
                         </>
                       ) : (
-                        <span className="text-muted">Consulta general</span>
+                        <span className="recorte min-w-0 flex-1">Consulta general</span>
                       )}
                     </span>
 
-                    <span className="flex items-center gap-2 text-[12.5px]">
-                      <Punto
-                        nivel={
-                          !c.proximaAccionAt
-                            ? "crit"
-                            : vencida
-                              ? "crit"
-                              : s.nivel === "warn"
-                                ? "warn"
-                                : "neutral"
-                        }
-                      />
-                      {/* Si hay próximo paso, se muestra. Si no, lo que
-                          importa es a quién se le pasó. */}
-                      <span className="recorte text-ink-2">
-                        {c.proximaAccion ??
-                          (c.vendedor
-                            ? `Con ${c.vendedor.nombre}`
-                            : "Sin asignar — la toma quien pueda")}
+                    {/* Qué sigue. Si todavía no hay próximo paso, lo que
+                        preguntó: es lo que hace falta para contestar. */}
+                    {c.proximaAccion ? (
+                      <span className="flex items-center gap-2 text-[12.5px]">
+                        <Punto
+                          nivel={vencida ? "crit" : s.nivel === "warn" ? "warn" : "neutral"}
+                        />
+                        <span className="recorte text-ink-2">{c.proximaAccion}</span>
+                        {c.proximaAccionAt && (
+                          <span
+                            className={`tnum ml-auto flex-none text-[12px] font-semibold ${
+                              vencida ? "text-crit" : "text-faint"
+                            }`}
+                          >
+                            {fechaHora(c.proximaAccionAt)}
+                          </span>
+                        )}
                       </span>
-                      {c.proximaAccionAt && (
-                        <span
-                          className={`tnum ml-auto flex-none text-[12px] font-semibold ${
-                            vencida ? "text-crit" : "text-faint"
-                          }`}
-                        >
-                          {fechaHora(c.proximaAccionAt)}
-                        </span>
-                      )}
-                    </span>
+                    ) : c.mensajeOriginal ? (
+                      <span className="recorte text-[12.5px] italic text-muted">
+                        “{c.mensajeOriginal}”
+                      </span>
+                    ) : null}
                   </span>
                 </Link>
               </li>
@@ -302,10 +348,6 @@ export async function BandejaLista({
           })
         )}
       </ul>
-
-      <div className="sticky bottom-0 bg-gradient-to-b from-transparent to-surface to-[26%] px-4 pb-4 pt-3.5 sm:px-5">
-        <NuevaConsulta />
-      </div>
     </div>
   );
 }

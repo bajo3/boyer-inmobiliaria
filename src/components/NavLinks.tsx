@@ -13,10 +13,20 @@ const ITEMS = [
   { href: "/documentos", label: "Documentos" },
 ];
 
-export function NavLinks({ esTitular }: { esTitular: boolean }) {
+export function NavLinks({
+  esTitular,
+  administra,
+}: {
+  esTitular: boolean;
+  administra: boolean;
+}) {
   const path = usePathname();
 
-  const items = esTitular ? [...ITEMS, { href: "/panel", label: "Panel" }] : ITEMS;
+  const items = [
+    ...ITEMS,
+    ...(administra ? [{ href: "/reporte", label: "Reporte" }] : []),
+    ...(esTitular ? [{ href: "/panel", label: "Panel" }] : []),
+  ];
 
   return (
     <nav

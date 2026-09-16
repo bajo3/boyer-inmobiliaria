@@ -42,6 +42,16 @@ Las únicas dos acciones explícitas son **Ganado** y **Rechazar**.
 - **Documentos**: recibo de alquiler, contrato de locación y autorización de
   venta, armados con los datos cargados y listos para imprimir o guardar en PDF.
 - **Calculadora de ajuste** por IPC, con la tabla de índices editable.
+- **Reparto automático** (`/configuracion`): la consulta cargada sin vendedor va
+  a quien menos abiertas tiene; si empatan, a quien hace más que no recibe una.
+  Cada vendedor se puede pausar (vacaciones) y el motivo queda en el historial.
+- **Reporte del equipo** (`/reporte`): recibidas, atendidas, tiempo de primera
+  respuesta en horas hábiles, respuestas a tiempo, visitas, ganadas y conversión.
+
+> **Supabase: usar el pooler en modo sesión (puerto 5432).** El de modo
+> transacción (6543) se cuelga cuando llegan más consultas en paralelo que
+> conexiones, y una pantalla dispara más de diez a la vez. `src/db/index.ts`
+> corrige el puerto solo si la URL trae 6543.
 
 ### Los tres roles
 

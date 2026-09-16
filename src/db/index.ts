@@ -44,23 +44,27 @@ async function conectar(): Promise<DB> {
   const { drizzle } = await import("drizzle-orm/postgres-js");
 
   const local = url!.includes("localhost") || url!.includes("127.0.0.1");
-
-  // El pooler de transacciones de Supabase (6543) no soporta prepared
-  // statements: con prepare activado, la segunda query de cada conexión falla.
   const pooler = url!.includes("pooler.supabase.com");
 
-  const sql = postgres(url!, {
-    // Pocas conexiones por instancia: en serverless hay muchas instancias vivas
-    // a la vez y el pooler de Supabase tiene un tope de clientes. Pasarse no da
-    // un error claro, da conexiones nuevas cada vez más lentas.
+  // El pooler de Supabase en modo transacción (puerto 6543) se cuelga cuando
+  // llegan más consultas en paralelo que conexiones abiertas: postgres.js las
+  // encola sobre una conexión ocupada y el pooler nunca las responde. Una sola
+  // pantalla dispara diez o más a la vez, así que pasaba seguido y sin error,
+  // solo la página cargando para siempre. En modo sesión (5432) la cola
+  // funciona. Se corrige acá y no solo en la variable de entorno para que no
+  // vuelva a aparecer si alguien pega la URL de 6543 que muestra Supabase.
+  const destino = pooler ? url!.replace(/:6543\//, ":5432/") : url!;
+
+  const sql = postgres(destino, {
+    // En modo sesión cada conexión ocupa un lugar del pooler mientras está
+    // abierta: pocas por instancia y soltarlas rápido cuando no se usan.
     max: local ? 1 : 3,
-    ssl: local ? false : "require",
-    prepare: pooler ? false : undefined,
-    // Abrir una conexión cuesta un handshake TLS entero (segundos si la base
-    // está lejos). Sostenerlas evita pagarlo en cada navegación; soltarlas
-    // después de un rato evita quedarse con slots del pooler sin usar.
-    idle_timeout: 60,
+    idle_timeout: 20,
     connect_timeout: 15,
+    ssl: local ? false : "require",
+    // Sin prepared statements: así la misma configuración sirve si la URL
+    // termina apuntando a un pooler de transacciones.
+    prepare: pooler ? false : undefined,
   });
 
   return drizzle(sql, { schema }) as unknown as DB;

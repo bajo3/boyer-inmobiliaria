@@ -41,9 +41,17 @@ function Guardar() {
 export function FormNuevaConsulta({
   propiedades,
   vendedores,
+  automatica,
+  leToca,
+  chico = false,
 }: {
   propiedades: PropiedadItem[];
   vendedores: VendedorItem[];
+  /** Si el reparto automático está prendido en Configuración. */
+  automatica: boolean;
+  leToca: string | null;
+  /** Versión compacta del botón, para la lista al costado de la ficha. */
+  chico?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [estado, accion] = useActionState<Estado, FormData>(crearConsulta, {});
@@ -67,7 +75,7 @@ export function FormNuevaConsulta({
     <>
       <button
         type="button"
-        className="btn btn-primario w-full text-[15.5px]"
+        className={`btn btn-primario w-full ${chico ? "btn-chico" : "text-[15.5px]"}`}
         onClick={() => setAbierto(true)}
       >
         + Nueva consulta
@@ -144,7 +152,16 @@ export function FormNuevaConsulta({
               <label className="block">
                 <span className="etiqueta">Pasársela a</span>
                 <select name="asignadaA" defaultValue="" className="campo">
-                  <option value="">— Sin asignar, la toma quien pueda —</option>
+                  {automatica ? (
+                    <>
+                      <option value="">
+                        Automático{leToca ? ` — le toca a ${leToca}` : ""}
+                      </option>
+                      <option value="ninguno">— Sin asignar, la toma quien pueda —</option>
+                    </>
+                  ) : (
+                    <option value="">— Sin asignar, la toma quien pueda —</option>
+                  )}
                   {vendedores.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.nombre}

@@ -29,6 +29,13 @@
       "when": 1789526001164,
       "tag": "0003_crazy_blue_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789561930526,
+      "tag": "0004_dark_lightspeed",
+      "breakpoints": true
     }
   ]
 }

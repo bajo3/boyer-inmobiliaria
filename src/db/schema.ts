@@ -149,7 +149,25 @@ export const usuarios = pgTable("usuarios", {
    * crearlo. El sistema se lo recuerda arriba de todo hasta que la cambie.
    */
   passwordCambiado: boolean("password_cambiado").notNull().default(false),
+  /** Si entra en el reparto automático de consultas. Sirve para vacaciones. */
+  recibeLeads: boolean("recibe_leads").notNull().default(true),
   creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Ajustes de la inmobiliaria. Una sola fila (id 1): son decisiones de la
+ * oficina, no de cada usuario.
+ */
+export const configuracion = pgTable("configuracion", {
+  id: integer("id").primaryKey().default(1),
+  /** Si está activa, la consulta que se carga sin vendedor se reparte sola. */
+  asignacionAutomatica: boolean("asignacion_automatica").notNull().default(false),
+  actualizadoAt: timestamp("actualizado_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  actualizadoPor: integer("actualizado_por").references(() => usuarios.id, {
+    onDelete: "set null",
+  }),
 });
 
 /* ────────────────────────────── contactos ────────────────────────────── */
@@ -587,6 +605,7 @@ export const operacionesRel = relations(operaciones, ({ one }) => ({
 /* ────────────────────────────── tipos ────────────────────────────── */
 
 export type Usuario = typeof usuarios.$inferSelect;
+export type Configuracion = typeof configuracion.$inferSelect;
 export type Contacto = typeof contactos.$inferSelect;
 export type Propiedad = typeof propiedades.$inferSelect;
 export type Autorizacion = typeof autorizaciones.$inferSelect;
