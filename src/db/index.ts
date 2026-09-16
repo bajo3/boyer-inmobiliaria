@@ -50,22 +50,36 @@ async function conectar(): Promise<DB> {
   const pooler = url!.includes("pooler.supabase.com");
 
   const sql = postgres(url!, {
-    max: local ? 1 : 5,
+    // Pocas conexiones por instancia: en serverless hay muchas instancias vivas
+    // a la vez y el pooler de Supabase tiene un tope de clientes. Pasarse no da
+    // un error claro, da conexiones nuevas cada vez más lentas.
+    max: local ? 1 : 3,
     ssl: local ? false : "require",
     prepare: pooler ? false : undefined,
+    // Abrir una conexión cuesta un handshake TLS entero (segundos si la base
+    // está lejos). Sostenerlas evita pagarlo en cada navegación; soltarlas
+    // después de un rato evita quedarse con slots del pooler sin usar.
+    idle_timeout: 60,
+    connect_timeout: 15,
   });
 
   return drizzle(sql, { schema }) as unknown as DB;
 }
 
 /**
- * En dev Next recarga los módulos en cada cambio; sin este cache se abriría
- * una base nueva por recarga (y con PGlite, un bloqueo sobre el directorio).
+ * Una sola conexión para todo el proceso, guardada en globalThis.
+ *
+ * En desarrollo, porque Next recarga los módulos en cada cambio y sin esto se
+ * abriría una base nueva por recarga (con PGlite, además, un bloqueo sobre el
+ * directorio). En producción, porque Next arma un bundle por ruta y este
+ * módulo se instancia en cada uno: sin el cache, cada pantalla termina con su
+ * propio pool y paga de nuevo el handshake TLS, que contra una base lejana son
+ * segundos por pantalla.
  */
 const globalForDb = globalThis as unknown as { __db?: Promise<DB> };
 
 const promesa = globalForDb.__db ?? conectar();
-if (process.env.NODE_ENV !== "production") globalForDb.__db = promesa;
+globalForDb.__db = promesa;
 
 export const db = await promesa;
 export { schema };

@@ -23,11 +23,29 @@ export default async function Alquileres() {
   const administra = puedeAdministrar(usuario);
   const periodo = periodoDe();
 
-  const vivos = await db.query.contratos.findMany({
-    where: eq(contratos.estado, "activo"),
-    with: { propiedad: true, inquilino: true },
-    orderBy: [asc(contratos.diaVencimiento)],
-  });
+  // Las propiedades libres no dependen de los contratos: van en el mismo viaje.
+  // Cada ida y vuelta a la base cuesta lo mismo esté cerca o lejos, así que lo
+  // que no depende de nada nunca tiene que esperar su turno.
+  const [vivos, disponibles] = await Promise.all([
+    db.query.contratos.findMany({
+      where: eq(contratos.estado, "activo"),
+      with: { propiedad: true, inquilino: true },
+      orderBy: [asc(contratos.diaVencimiento)],
+    }),
+    administra
+      ? db
+          .select({
+            id: propiedades.id,
+            codigo: propiedades.codigo,
+            direccion: propiedades.direccion,
+            barrio: propiedades.barrio,
+          })
+          .from(propiedades)
+          .where(inArray(propiedades.estado, ["publicada", "borrador", "suspendida"]))
+          .orderBy(asc(propiedades.codigo))
+          .limit(500)
+      : Promise.resolve([]),
+  ]);
 
   // Los pagos del mes se traen en una sola consulta y se cruzan en memoria:
   // drizzle no califica las columnas dentro de una subconsulta correlacionada
@@ -71,21 +89,6 @@ export default async function Alquileres() {
   const totales = totalesDelMes(filas);
   const atrasados = filas.filter((f) => f.estado.dias < 0 && !f.estado.pagado);
   const cobrados = filas.filter((f) => f.estado.pagado).length;
-
-  // Propiedades que se pueden poner en alquiler, para el alta de contrato.
-  const disponibles = administra
-    ? await db
-        .select({
-          id: propiedades.id,
-          codigo: propiedades.codigo,
-          direccion: propiedades.direccion,
-          barrio: propiedades.barrio,
-        })
-        .from(propiedades)
-        .where(inArray(propiedades.estado, ["publicada", "borrador", "suspendida"]))
-        .orderBy(asc(propiedades.codigo))
-        .limit(500)
-    : [];
 
   // Ajustes que caen dentro de los próximos 45 días: llegar tarde a un ajuste
   // es cobrar un mes entero al valor viejo.

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SignJWT, jwtVerify } from "jose";
@@ -41,8 +42,14 @@ export async function cerrarSesion() {
   store.delete(COOKIE);
 }
 
-/** Usuario de la sesión actual, o null. No redirige. */
-export async function sesionActual(): Promise<Usuario | null> {
+/**
+ * Usuario de la sesión actual, o null. No redirige.
+ *
+ * Va envuelto en cache() porque en cada navegación lo piden el layout y la
+ * página: sin esto son dos consultas idénticas, una atrás de la otra, antes
+ * de que la pantalla empiece siquiera a cargar sus propios datos.
+ */
+export const sesionActual = cache(async function sesionActual(): Promise<Usuario | null> {
   const store = await cookies();
   const token = store.get(COOKIE)?.value;
   if (!token) return null;
@@ -62,7 +69,7 @@ export async function sesionActual(): Promise<Usuario | null> {
   } catch {
     return null;
   }
-}
+});
 
 /** Para páginas privadas: devuelve el usuario o manda al login. */
 export async function requerirSesion(): Promise<Usuario> {
