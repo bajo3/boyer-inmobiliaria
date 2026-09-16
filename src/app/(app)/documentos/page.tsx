@@ -1,18 +1,20 @@
 import Link from "next/link";
-import { desc, eq, asc } from "drizzle-orm";
+import { desc, eq, asc, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { contratos, pagos, indices, autorizaciones } from "@/db/schema";
+import { contratos, pagos, indices, autorizaciones, propiedades } from "@/db/schema";
 import { requerirSesion, puedeAdministrar } from "@/lib/auth";
 import { precio as fmtPrecio, fecha as fmtFecha } from "@/lib/formato";
 import { nombrePeriodo } from "@/lib/alquileres";
 import { CalculadoraIPC } from "@/components/CalculadoraIPC";
 import { TablaIndices } from "@/components/TablaIndices";
+import { NuevoContrato } from "@/components/NuevoContrato";
+import { NuevoRecibo } from "@/components/NuevoRecibo";
 
 export default async function Documentos() {
   const usuario = await requerirSesion();
   const administra = puedeAdministrar(usuario);
 
-  const [recibos, vivos, autos, tabla] = await Promise.all([
+  const [recibos, vivos, autos, tabla, disponibles] = await Promise.all([
     db.query.pagos.findMany({
       with: { contrato: { with: { inquilino: true, propiedad: true } } },
       orderBy: [desc(pagos.pagadoAt)],
@@ -29,6 +31,20 @@ export default async function Documentos() {
       limit: 30,
     }),
     db.select().from(indices).orderBy(asc(indices.mes)),
+    // Las propiedades que se pueden alquilar, para el alta de contrato.
+    administra
+      ? db
+          .select({
+            id: propiedades.id,
+            codigo: propiedades.codigo,
+            direccion: propiedades.direccion,
+            barrio: propiedades.barrio,
+          })
+          .from(propiedades)
+          .where(inArray(propiedades.estado, ["publicada", "borrador", "suspendida"]))
+          .orderBy(asc(propiedades.codigo))
+          .limit(500)
+      : Promise.resolve([]),
   ]);
 
   const paraCalculadora = vivos.map((c) => ({
@@ -50,6 +66,24 @@ export default async function Documentos() {
             Se arman con los datos que ya están cargados y se imprimen o se
             guardan como PDF desde el navegador.
           </p>
+
+          <div
+            className={`mt-3.5 grid gap-2.5 ${administra ? "sm:grid-cols-2" : ""}`}
+          >
+            <NuevoRecibo
+              contratos={vivos.map((c) => ({
+                id: c.id,
+                inquilino: c.inquilino.nombre,
+                direccion: c.propiedad.direccion,
+                monto: c.monto,
+                expensas: c.expensas,
+                moneda: c.moneda,
+              }))}
+            />
+            {administra && (
+              <NuevoContrato propiedades={disponibles} imprimirAlCrear />
+            )}
+          </div>
         </div>
 
         <Seccion

@@ -19,15 +19,23 @@ const AJUSTES = [
   ["sin_ajuste", "Sin ajuste"],
 ] as const;
 
+/**
+ * Fecha local como "2026-09-16". No toISOString(): eso da la fecha en UTC, y
+ * después de las 21 h en Argentina ya es mañana.
+ */
+function iso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** Un contrato típico arranca hoy y dura dos años. */
 function hoy(): string {
-  return new Date().toISOString().slice(0, 10);
+  return iso(new Date());
 }
 
 function enDosAnios(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() + 2);
-  return d.toISOString().slice(0, 10);
+  return iso(d);
 }
 
 function Guardar() {
@@ -39,7 +47,14 @@ function Guardar() {
   );
 }
 
-export function NuevoContrato({ propiedades }: { propiedades: PropiedadItem[] }) {
+export function NuevoContrato({
+  propiedades,
+  imprimirAlCrear = false,
+}: {
+  propiedades: PropiedadItem[];
+  /** Al guardar, ir directo al contrato listo para imprimir. */
+  imprimirAlCrear?: boolean;
+}) {
   const [abierto, setAbierto] = useState(false);
   const [estado, accion] = useActionState<Estado, FormData>(crearContrato, {});
   const form = useRef<HTMLFormElement>(null);
@@ -89,6 +104,8 @@ export function NuevoContrato({ propiedades }: { propiedades: PropiedadItem[] })
             </h2>
 
             <form ref={form} action={accion} className="flex flex-col gap-3.5">
+              {imprimirAlCrear && <input type="hidden" name="imprimir" value="1" />}
+
               <label className="block">
                 <span className="etiqueta">Propiedad</span>
                 <select name="propiedadId" required defaultValue="" className="campo">
@@ -242,6 +259,7 @@ export function NuevoContrato({ propiedades }: { propiedades: PropiedadItem[] })
 
               <p className="text-[12px] text-muted">
                 La propiedad queda marcada como alquilada y deja de ofrecerse.
+                {imprimirAlCrear && " Al guardar se abre el contrato para imprimir."}
               </p>
             </form>
           </div>

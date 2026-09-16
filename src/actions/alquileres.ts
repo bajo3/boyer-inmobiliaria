@@ -2,6 +2,7 @@
 
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
 import { contratos, pagos, contactos, propiedades } from "@/db/schema";
@@ -41,6 +42,68 @@ export async function registrarPago(
     .onConflictDoNothing();
 
   revalidatePath("/alquileres");
+}
+
+export type EstadoRecibo = { error?: string; pagoId?: number };
+
+const esquemaRecibo = z.object({
+  contratoId: z.coerce.number().int().positive("Elegí el contrato."),
+  periodo: z.string().regex(/^\d{4}-\d{2}$/, "Elegí el mes que se cobra."),
+  monto: z.coerce.number().positive("Poné el monto cobrado."),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha no es válida."),
+  notas: z.string().trim().optional(),
+});
+
+/**
+ * Registra el cobro y lleva directo al recibo para imprimirlo.
+ *
+ * Si ese mes ya estaba cobrado no se crea otro: dos recibos por el mismo
+ * período es exactamente el papel que después termina en una discusión.
+ */
+export async function crearRecibo(
+  _prev: EstadoRecibo,
+  formData: FormData,
+): Promise<EstadoRecibo> {
+  const usuario = await requerirSesion();
+
+  const parsed = esquemaRecibo.safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const d = parsed.data;
+
+  // Mediodía en Argentina: guardar la medianoche corre la fecha un día según
+  // desde qué huso se la mire.
+  const [nuevo] = await db
+    .insert(pagos)
+    .values({
+      contratoId: d.contratoId,
+      periodo: d.periodo,
+      monto: d.monto.toString(),
+      pagadoAt: new Date(`${d.fecha}T12:00:00-03:00`),
+      registradoPor: usuario.id,
+      notas: d.notas || null,
+    })
+    .onConflictDoNothing()
+    .returning({ id: pagos.id });
+
+  if (!nuevo) {
+    const [existente] = await db
+      .select({ id: pagos.id })
+      .from(pagos)
+      .where(and(eq(pagos.contratoId, d.contratoId), eq(pagos.periodo, d.periodo)))
+      .limit(1);
+
+    return {
+      error: "Ese mes ya está cobrado para este contrato.",
+      pagoId: existente?.id,
+    };
+  }
+
+  revalidatePath("/alquileres");
+  revalidatePath("/documentos");
+  redirect(`/imprimir/recibo/${nuevo.id}`);
 }
 
 /** Deshace un pago mal cargado. */
@@ -132,21 +195,24 @@ export async function crearContrato(
   });
   if (!propiedad) return { error: "No existe esa propiedad." };
 
-  await db.insert(contratos).values({
-    propiedadId: d.propiedadId,
-    inquilinoId,
-    propietarioId: propiedad.propietarioId,
-    monto: d.monto.toString(),
-    moneda: d.moneda,
-    expensas: d.expensas?.toString() ?? null,
-    diaVencimiento: d.diaVencimiento,
-    inicio: d.inicio,
-    fin: d.fin,
-    ajuste: d.ajuste,
-    proximoAjuste: proximoAjusteDesde(d.inicio, d.ajuste),
-    comisionPct: d.comisionPct?.toString() ?? null,
-    notas: d.notas || null,
-  });
+  const [nuevo] = await db
+    .insert(contratos)
+    .values({
+      propiedadId: d.propiedadId,
+      inquilinoId,
+      propietarioId: propiedad.propietarioId,
+      monto: d.monto.toString(),
+      moneda: d.moneda,
+      expensas: d.expensas?.toString() ?? null,
+      diaVencimiento: d.diaVencimiento,
+      inicio: d.inicio,
+      fin: d.fin,
+      ajuste: d.ajuste,
+      proximoAjuste: proximoAjusteDesde(d.inicio, d.ajuste),
+      comisionPct: d.comisionPct?.toString() ?? null,
+      notas: d.notas || null,
+    })
+    .returning({ id: contratos.id });
 
   // Alquilada: deja de ofrecerse y no vuelve a aparecer como disponible.
   await db
@@ -156,6 +222,11 @@ export async function crearContrato(
 
   revalidatePath("/alquileres");
   revalidatePath("/propiedades");
+  revalidatePath("/documentos");
+
+  // Desde Documentos lo que se quiere es el papel para firmar, no volver a la lista.
+  if (formData.get("imprimir") === "1") redirect(`/imprimir/contrato/${nuevo.id}`);
+
   return { ok: true };
 }
 
